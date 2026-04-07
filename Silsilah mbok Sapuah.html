@@ -1,0 +1,899 @@
+<!doctype html>
+<html lang="id" class="h-full">
+ <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Silsilah Keluarga</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&amp;family=Source+Sans+3:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+  <style>
+html, body { 
+  height: 100%; 
+  margin: 0; 
+  font-family: 'Source Sans 3', sans-serif;
+}
+
+.font-display { font-family: 'Playfair Display', serif; }
+
+.tree-wrapper { 
+  overflow: auto; 
+  height: 100%; 
+  scroll-behavior: smooth;
+}
+
+/* Relation lines */
+.line-marriage { stroke: #e74c3c; stroke-width: 3; }
+.line-child { stroke: #2ecc71; stroke-width: 2; }
+.line-adopted { stroke: #3498db; stroke-width: 2; stroke-dasharray: 8,4; }
+.line-sibling { stroke: #f39c12; stroke-width: 2; }
+
+/* Card styles */
+.family-card {
+  background: rgba(255,255,255,0.95);
+  backdrop-filter: blur(12px);
+  border: 2px solid rgba(0,0,0,0.08);
+  border-radius: 16px;
+  padding: 16px 20px;
+  min-width: 160px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+  position: relative;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+
+.family-card:hover {
+  transform: translateY(-6px) scale(1.02);
+  box-shadow: 0 16px 32px rgba(0,0,0,0.15);
+  border-color: rgba(0,0,0,0.2);
+}
+
+.family-card.male { 
+  border-left: 5px solid #3b82f6; 
+  background: linear-gradient(135deg, rgba(59,130,246,0.05) 0%, rgba(255,255,255,0.95) 100%);
+}
+
+.family-card.female { 
+  border-left: 5px solid #ec4899; 
+  background: linear-gradient(135deg, rgba(236,72,153,0.05) 0%, rgba(255,255,255,0.95) 100%);
+}
+
+/* Scroll animations */
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+
+.scroll-reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Popup */
+.popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(6px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.popup-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.popup-content {
+  background: #fff;
+  border-radius: 20px;
+  padding: 32px;
+  max-width: 480px;
+  width: 90%;
+  position: relative;
+  transform: scale(0.9) translateY(20px);
+  transition: all 0.3s ease;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.2);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.popup-overlay.active .popup-content {
+  transform: scale(1) translateY(0);
+}
+
+/* Generation row */
+.gen-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 32px;
+  flex-wrap: wrap;
+  padding: 40px 20px;
+  position: relative;
+  min-height: 180px;
+}
+
+.gen-label {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: rgba(0,0,0,0.2);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* SVG lines container */
+.lines-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Legend */
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.legend-line {
+  width: 32px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+/* Scrollbar */
+.tree-wrapper::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.tree-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tree-wrapper::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.15);
+  border-radius: 5px;
+}
+
+.tree-wrapper::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.25);
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a1a2e;
+  color: #fff;
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-size: 14px;
+  z-index: 2000;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+
+.toast.show {
+  opacity: 1;
+}
+
+/* Buttons */
+.btn-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s;
+  cursor: pointer;
+  border: none;
+  white-space: nowrap;
+}
+
+.btn-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-action:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+}
+
+/* Loading spinner */
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Close button */
+.close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #f3f4f6;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: #e5e7eb;
+  transform: rotate(90deg);
+}
+
+/* Input styles */
+input, textarea, select {
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: 'Source Sans 3', sans-serif;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+}
+
+/* Header */
+header {
+  background: linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(236,72,153,0.05) 100%);
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+}
+
+/* Loading state */
+.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.empty-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #a78bfa);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 24px rgba(99,102,241,0.3);
+}
+
+/* Firebase status */
+.firebase-status {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ef4444;
+}
+
+.firebase-status.connected {
+  background: #2ecc71;
+}
+  </style>
+  <style>body { box-sizing: border-box; }</style>
+  <script src="/_sdk/data_sdk.js" type="text/javascript"></script>
+  <script src="/_sdk/element_sdk.js" type="text/javascript"></script>
+ </head>
+ <body class="h-full">
+  <div id="app" class="h-full w-full flex flex-col" style="background: linear-gradient(135deg, #f8f9fa 0%, #e8e9f3 50%, #f0f1fa 100%);"><!-- Firebase Status -->
+   <div id="firebaseStatus" class="firebase-status" title="Koneksi Firebase"></div><!-- Header -->
+   <header class="px-6 py-5 flex items-center justify-between flex-shrink-0">
+    <div>
+     <h1 id="mainTitle" class="font-display text-3xl font-bold text-gray-800">Silsilah Keluarga</h1>
+     <p class="text-sm text-gray-500 mt-1">Kelola pohon keluarga Anda dengan mudah</p>
+    </div>
+    <div class="flex gap-3"><button onclick="openAddForm(null, 'root')" class="btn-action text-white" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);"> <i data-lucide="plus" style="width:16px;height:16px;"></i> Tambah Anggota </button>
+    </div>
+   </header><!-- Legend -->
+   <div class="px-6 py-3 flex gap-6 flex-wrap flex-shrink-0 flex-wrap" style="background: rgba(255,255,255,0.5); border-bottom: 1px solid rgba(0,0,0,0.05);">
+    <div class="legend-item text-gray-600">
+     <div class="legend-line" style="background:#e74c3c;"></div><span>Pernikahan</span>
+    </div>
+    <div class="legend-item text-gray-600">
+     <div class="legend-line" style="background:#2ecc71;"></div><span>Anak Kandung</span>
+    </div>
+    <div class="legend-item text-gray-600">
+     <div class="legend-line" style="background:#3498db; border-top: 2px dashed;"></div><span>Anak Angkat</span>
+    </div>
+    <div class="legend-item text-gray-600">
+     <div class="legend-line" style="background:#f39c12;"></div><span>Saudara</span>
+    </div>
+   </div><!-- Tree Container -->
+   <div class="tree-wrapper flex-1 relative" id="treeContainer">
+    <div id="treeContent" class="relative p-8" style="min-width: 100%; min-height: 100%;"><!-- Empty state -->
+     <div id="emptyState" class="empty-state text-gray-500">
+      <div class="empty-icon"><i data-lucide="users" style="width:40px;height:40px;color:white;"></i>
+      </div>
+      <p class="font-display text-2xl font-bold mb-2 text-gray-700">Belum ada anggota keluarga</p>
+      <p class="text-gray-500 mb-6">Klik tombol "Tambah Anggota" untuk memulai silsilah keluarga Anda</p>
+     </div>
+    </div>
+   </div>
+  </div><!-- Info Popup -->
+  <div id="infoPopup" class="popup-overlay" onclick="if(event.target===this)closePopup()">
+   <div class="popup-content"><button onclick="closePopup()" class="close-btn"> <i data-lucide="x" style="width:18px;height:18px;color:#666;"></i> </button>
+    <div id="popupBody"></div>
+   </div>
+  </div><!-- Add/Edit Form -->
+  <div id="formOverlay" class="popup-overlay" onclick="if(event.target===this)closeForm()">
+   <div class="popup-content" style="max-width:500px;"><button onclick="closeForm()" class="close-btn"> <i data-lucide="x" style="width:18px;height:18px;color:#666;"></i> </button>
+    <h3 id="formTitle" class="font-display text-2xl font-bold mb-6 text-gray-800">Tambah Anggota</h3>
+    <form id="memberForm" onsubmit="handleFormSubmit(event)"><input type="hidden" id="f_nodeId"> <input type="hidden" id="f_parentId"> <input type="hidden" id="f_editId">
+     <div class="mb-4"><label for="f_name" class="block text-sm font-semibold text-gray-700 mb-2">Nama Lengkap</label> <input id="f_name" type="text" required placeholder="Masukkan nama lengkap" class="w-full">
+     </div>
+     <div class="grid grid-cols-2 gap-4 mb-4">
+      <div><label for="f_gender" class="block text-sm font-semibold text-gray-700 mb-2">Gender</label> <select id="f_gender" class="w-full"> <option value="male">Laki-laki</option> <option value="female">Perempuan</option> </select>
+      </div>
+      <div><label for="f_relation" class="block text-sm font-semibold text-gray-700 mb-2">Hubungan</label> <select id="f_relation" class="w-full"> <option value="root">Akar (Root)</option> <option value="spouse">Pasangan</option> <option value="child">Anak Kandung</option> <option value="adopted">Anak Angkat</option> <option value="sibling">Saudara</option> </select>
+      </div>
+     </div>
+     <div class="grid grid-cols-2 gap-4 mb-4">
+      <div><label for="f_birth" class="block text-sm font-semibold text-gray-700 mb-2">Tanggal Lahir</label> <input id="f_birth" type="date" class="w-full">
+      </div>
+      <div><label for="f_death" class="block text-sm font-semibold text-gray-700 mb-2">Tanggal Wafat</label> <input id="f_death" type="date" class="w-full">
+      </div>
+     </div>
+     <div class="mb-6"><label for="f_notes" class="block text-sm font-semibold text-gray-700 mb-2">Catatan</label> <textarea id="f_notes" rows="3" placeholder="Info tambahan..." class="w-full"></textarea>
+     </div>
+     <div class="flex gap-3"><button type="submit" id="formSubmitBtn" class="btn-action flex-1 text-white justify-center" style="background: linear-gradient(135deg, #6366f1, #8b5cf6);"> <span id="formSubmitSpinner" style="display:none;" class="spinner"></span> <span id="formSubmitText">Simpan</span> </button> <button type="button" onclick="closeForm()" class="btn-action text-gray-600" style="background:#f3f4f6;">Batal</button>
+     </div>
+    </form>
+   </div>
+  </div><!-- Delete Confirm -->
+  <div id="deleteConfirm" class="popup-overlay" onclick="if(event.target===this)closeDeleteConfirm()">
+   <div class="popup-content" style="max-width:400px;text-align:center;">
+    <div style="width:60px;height:60px;border-radius:50%;background:#fef2f2;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;"><i data-lucide="trash-2" style="width:28px;height:28px;color:#ef4444;"></i>
+    </div>
+    <h3 class="font-display text-xl font-bold text-gray-800 mb-2">Hapus Anggota?</h3>
+    <p id="deleteMsg" class="text-sm text-gray-500 mb-6"></p>
+    <div class="flex gap-3 justify-center"><button id="confirmDeleteBtn" onclick="confirmDelete()" class="btn-action text-white" style="background:#ef4444;"> <span id="deleteSpinner" style="display:none;" class="spinner"></span> Hapus </button> <button onclick="closeDeleteConfirm()" class="btn-action text-gray-600" style="background:#f3f4f6;">Batal</button>
+    </div>
+   </div>
+  </div><!-- Toast -->
+  <div id="toast" class="toast"></div>
+  <script>
+// ===== Firebase Config =====
+const firebaseConfig = {
+  apiKey: "AIzaSyDvL5U7-g6x_vL_dW4qW8rZ_9K_mN_oP1Q",
+  authDomain: "silsilah-keluarga-app.firebaseapp.com",
+  projectId: "silsilah-keluarga-app",
+  storageBucket: "silsilah-keluarga-app.appspot.com",
+  messagingSenderId: "123456789",
+  databaseURL: "https://silsilah-keluarga-app-default-rtdb.firebaseio.com"
+};
+
+// Initialize Firebase
+let db;
+let allData = [];
+let pendingDeleteRecord = null;
+let formMode = 'add';
+
+try {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.database();
+  updateFirebaseStatus(true);
+  loadDataFromFirebase();
+} catch (e) {
+  console.error('Firebase initialization error:', e);
+  updateFirebaseStatus(false);
+  showToast('Tidak dapat terhubung ke Firebase. Gunakan penyimpanan lokal.');
+  initLocalStorage();
+}
+
+// ===== Firebase Status =====
+function updateFirebaseStatus(connected) {
+  const status = document.getElementById('firebaseStatus');
+  if (connected) {
+    status.classList.add('connected');
+    status.title = 'Terhubung ke Firebase';
+  } else {
+    status.classList.remove('connected');
+    status.title = 'Tidak terhubung ke Firebase';
+  }
+}
+
+// ===== Local Storage Fallback =====
+function initLocalStorage() {
+  const stored = localStorage.getItem('familyTree');
+  if (stored) {
+    try {
+      allData = JSON.parse(stored);
+      renderTree();
+    } catch (e) {
+      allData = [];
+    }
+  }
+}
+
+function saveToLocalStorage() {
+  localStorage.setItem('familyTree', JSON.stringify(allData));
+  renderTree();
+}
+
+// ===== Firebase Functions =====
+function loadDataFromFirebase() {
+  if (!db) return;
+  
+  const ref = db.ref('familyMembers');
+  ref.on('value', (snapshot) => {
+    const data = snapshot.val();
+    if (data) {
+      allData = Object.entries(data).map(([key, value]) => ({
+        ...value,
+        firebaseId: key
+      }));
+    } else {
+      allData = [];
+    }
+    renderTree();
+  });
+}
+
+async function saveToFirebase(member) {
+  if (!db) {
+    saveToLocalStorage();
+    return true;
+  }
+
+  try {
+    const ref = db.ref('familyMembers');
+    if (member.firebaseId) {
+      await ref.child(member.firebaseId).update(member);
+    } else {
+      const newRef = ref.push();
+      member.firebaseId = newRef.key;
+      await newRef.set(member);
+    }
+    return true;
+  } catch (e) {
+    console.error('Firebase save error:', e);
+    showToast('Gagal menyimpan ke Firebase. Coba lagi.');
+    return false;
+  }
+}
+
+async function deleteFromFirebase(member) {
+  if (!db) {
+    allData = allData.filter(m => m.nodeId !== member.nodeId);
+    saveToLocalStorage();
+    return true;
+  }
+
+  try {
+    await db.ref('familyMembers/' + member.firebaseId).remove();
+    return true;
+  } catch (e) {
+    console.error('Firebase delete error:', e);
+    showToast('Gagal menghapus dari Firebase. Coba lagi.');
+    return false;
+  }
+}
+
+// ===== Toast =====
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ===== Generate ID =====
+function genId() {
+  return 'n_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+}
+
+// ===== Form Functions =====
+function openAddForm(parentId, relationType) {
+  formMode = 'add';
+  document.getElementById('formTitle').textContent = 'Tambah Anggota Baru';
+  document.getElementById('formSubmitText').textContent = 'Simpan';
+  document.getElementById('f_nodeId').value = genId();
+  document.getElementById('f_parentId').value = parentId || '';
+  document.getElementById('f_editId').value = '';
+  document.getElementById('f_name').value = '';
+  document.getElementById('f_gender').value = 'male';
+  document.getElementById('f_relation').value = relationType || 'root';
+  document.getElementById('f_birth').value = '';
+  document.getElementById('f_death').value = '';
+  document.getElementById('f_notes').value = '';
+  document.getElementById('formSubmitBtn').disabled = false;
+  document.getElementById('formSubmitSpinner').style.display = 'none';
+  document.getElementById('formOverlay').classList.add('active');
+  lucide.createIcons();
+}
+
+function openEditForm(record) {
+  formMode = 'edit';
+  document.getElementById('formTitle').textContent = 'Edit Anggota';
+  document.getElementById('formSubmitText').textContent = 'Perbarui';
+  document.getElementById('f_nodeId').value = record.nodeId;
+  document.getElementById('f_parentId').value = record.parentId || '';
+  document.getElementById('f_editId').value = record.firebaseId || '';
+  document.getElementById('f_name').value = record.name;
+  document.getElementById('f_gender').value = record.gender || 'male';
+  document.getElementById('f_relation').value = record.relationType || 'root';
+  document.getElementById('f_birth').value = record.birthDate || '';
+  document.getElementById('f_death').value = record.deathDate || '';
+  document.getElementById('f_notes').value = record.notes || '';
+  document.getElementById('formSubmitBtn').disabled = false;
+  document.getElementById('formSubmitSpinner').style.display = 'none';
+  document.getElementById('formOverlay').classList.add('active');
+  closePopup();
+}
+
+function closeForm() {
+  document.getElementById('formOverlay').classList.remove('active');
+}
+
+async function handleFormSubmit(e) {
+  e.preventDefault();
+  
+  const btn = document.getElementById('formSubmitBtn');
+  const spinner = document.getElementById('formSubmitSpinner');
+  btn.disabled = true;
+  spinner.style.display = 'inline-block';
+
+  const member = {
+    nodeId: document.getElementById('f_nodeId').value,
+    name: document.getElementById('f_name').value.trim(),
+    gender: document.getElementById('f_gender').value,
+    relationType: document.getElementById('f_relation').value,
+    parentId: document.getElementById('f_parentId').value || '',
+    spouseId: '',
+    birthDate: document.getElementById('f_birth').value || '',
+    deathDate: document.getElementById('f_death').value || '',
+    notes: document.getElementById('f_notes').value || '',
+    generation: 0,
+    createdAt: Date.now()
+  };
+
+  // Calculate generation
+  if (member.parentId) {
+    const parent = allData.find(d => d.nodeId === member.parentId);
+    if (parent) {
+      if (member.relationType === 'child' || member.relationType === 'adopted') {
+        member.generation = (parent.generation || 0) + 1;
+      } else {
+        member.generation = parent.generation || 0;
+      }
+      if (member.relationType === 'spouse') {
+        member.spouseId = parent.nodeId;
+      }
+    }
+  }
+
+  let success = false;
+  if (formMode === 'edit') {
+    const existing = allData.find(m => m.nodeId === member.nodeId);
+    if (existing) {
+      member.firebaseId = existing.firebaseId;
+      success = await saveToFirebase(member);
+    }
+  } else {
+    if (allData.length >= 999) {
+      showToast('Batas maksimum 999 anggota tercapai!');
+      btn.disabled = false;
+      spinner.style.display = 'none';
+      return;
+    }
+    success = await saveToFirebase(member);
+  }
+
+  btn.disabled = false;
+  spinner.style.display = 'none';
+
+  if (success) {
+    showToast(formMode === 'edit' ? 'Data diperbarui!' : 'Anggota ditambahkan!');
+    closeForm();
+    if (!db) renderTree();
+  }
+}
+
+// ===== Delete Functions =====
+function openDeleteConfirm(record) {
+  pendingDeleteRecord = record;
+  document.getElementById('deleteMsg').textContent = `"${record.name}" dan semua keturunannya akan dihapus secara permanen.`;
+  document.getElementById('deleteConfirm').classList.add('active');
+  closePopup();
+  lucide.createIcons();
+}
+
+function closeDeleteConfirm() {
+  document.getElementById('deleteConfirm').classList.remove('active');
+  pendingDeleteRecord = null;
+}
+
+async function confirmDelete() {
+  if (!pendingDeleteRecord) return;
+
+  const btn = document.getElementById('confirmDeleteBtn');
+  const spinner = document.getElementById('deleteSpinner');
+  btn.disabled = true;
+  spinner.style.display = 'inline-block';
+
+  // Find all descendants
+  const toDelete = [];
+  function findDescendants(nodeId) {
+    toDelete.push(nodeId);
+    allData.filter(d => d.parentId === nodeId).forEach(d => findDescendants(d.nodeId));
+  }
+  findDescendants(pendingDeleteRecord.nodeId);
+
+  for (const nodeId of toDelete) {
+    const rec = allData.find(m => m.nodeId === nodeId);
+    if (rec) {
+      await deleteFromFirebase(rec);
+    }
+  }
+
+  btn.disabled = false;
+  spinner.style.display = 'none';
+  showToast('Anggota dan keturunannya dihapus!');
+  closeDeleteConfirm();
+}
+
+// ===== Popup =====
+function showInfoPopup(record) {
+  const genderIcon = record.gender === 'female' ? '♀' : '♂';
+  const genderColor = record.gender === 'female' ? '#ec4899' : '#3b82f6';
+  const relLabels = { 
+    root: 'Akar', 
+    spouse: 'Pasangan', 
+    child: 'Anak Kandung', 
+    adopted: 'Anak Angkat', 
+    sibling: 'Saudara' 
+  };
+  const relColors = { 
+    root: '#8b5cf6', 
+    spouse: '#e74c3c', 
+    child: '#2ecc71', 
+    adopted: '#3498db', 
+    sibling: '#f39c12' 
+  };
+
+  const parent = record.parentId ? allData.find(d => d.nodeId === record.parentId) : null;
+  const children = allData.filter(d => d.parentId === record.nodeId && (d.relationType === 'child' || d.relationType === 'adopted'));
+  const spouse = allData.find(d => (d.spouseId === record.nodeId || (d.parentId === record.nodeId && d.relationType === 'spouse')));
+
+  let ageText = '';
+  if (record.birthDate) {
+    const birthYear = new Date(record.birthDate).getFullYear();
+    if (record.deathDate) {
+      const deathYear = new Date(record.deathDate).getFullYear();
+      ageText = `${birthYear} - ${deathYear} (${deathYear - birthYear} th)`;
+    } else {
+      const age = new Date().getFullYear() - birthYear;
+      ageText = `${birthYear} (${age} th)`;
+    }
+  }
+
+  let html = `
+    <div class="flex items-start gap-4 mb-6 pb-4 border-b border-gray-200">
+      <div style="width:56px;height:56px;border-radius:50%;background:${genderColor}20;color:${genderColor};" class="flex items-center justify-center text-3xl font-bold flex-shrink-0">${genderIcon}</div>
+      <div class="flex-1">
+        <h3 class="font-display text-2xl font-bold text-gray-800 mb-2">${record.name}</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <span style="background:${relColors[record.relationType] || '#888'}20;color:${relColors[record.relationType] || '#888'};" class="text-xs px-3 py-1 rounded-full font-semibold">${relLabels[record.relationType] || record.relationType}</span>
+          ${ageText ? `<span style="background:#f3f4f6;color:#666;" class="text-xs px-3 py-1 rounded-full font-semibold">${ageText}</span>` : ''}
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-3 mb-6 text-sm">
+      ${record.birthDate ? `<div><span class="font-semibold text-gray-700">📅 Lahir:</span> <span class="text-gray-600">${new Date(record.birthDate).toLocaleDateString('id-ID')}</span></div>` : ''}
+      ${record.deathDate ? `<div><span class="font-semibold text-gray-700">⚰️ Wafat:</span> <span class="text-gray-600">${new Date(record.deathDate).toLocaleDateString('id-ID')}</span></div>` : ''}
+      ${parent ? `<div><span class="font-semibold text-gray-700">👨‍👩‍👧 Orang Tua:</span> <span class="text-gray-600">${parent.name}</span></div>` : ''}
+      ${spouse ? `<div><span class="font-semibold text-gray-700">💑 Pasangan:</span> <span class="text-gray-600">${spouse.name}</span></div>` : ''}
+      ${children.length > 0 ? `<div><span class="font-semibold text-gray-700">👶 Anak:</span> <span class="text-gray-600">${children.map(c => c.name).join(', ')}</span></div>` : ''}
+    </div>
+
+    ${record.notes ? `<div class="mb-6 p-3 rounded-12 bg-blue-50 border border-blue-100"><span class="font-semibold text-gray-700 text-sm">📝 Catatan:</span><p class="text-sm text-gray-600 mt-1">${record.notes}</p></div>` : ''}
+
+    <div class="flex gap-2 flex-wrap">
+      <button onclick="openAddForm('${record.nodeId}', 'child')" class="btn-action text-white text-xs" style="background:#2ecc71;">
+        <i data-lucide="plus" style="width:14px;height:14px;"></i> Anak
+      </button>
+      <button onclick="openAddForm('${record.nodeId}', 'spouse')" class="btn-action text-white text-xs" style="background:#e74c3c;">
+        <i data-lucide="heart" style="width:14px;height:14px;"></i> Pasangan
+      </button>
+      <button onclick="openAddForm('${record.nodeId}', 'adopted')" class="btn-action text-white text-xs" style="background:#3498db;">
+        <i data-lucide="plus" style="width:14px;height:14px;"></i> Anak Angkat
+      </button>
+      <button onclick="openAddForm('${record.nodeId}', 'sibling')" class="btn-action text-white text-xs" style="background:#f39c12;">
+        <i data-lucide="users" style="width:14px;height:14px;"></i> Saudara
+      </button>
+    </div>
+
+    <div class="flex gap-2 mt-4 pt-4 border-t border-gray-200">
+      <button onclick="openEditForm(allData.find(d=>d.nodeId==='${record.nodeId}'))" class="btn-action flex-1 text-xs" style="background:#f3f4f6;color:#666;">
+        <i data-lucide="edit" style="width:14px;height:14px;"></i> Edit
+      </button>
+      <button onclick="openDeleteConfirm(allData.find(d=>d.nodeId==='${record.nodeId}'))" class="btn-action text-white text-xs" style="background:#ef4444;">
+        <i data-lucide="trash-2" style="width:14px;height:14px;"></i> Hapus
+      </button>
+    </div>
+  `;
+
+  document.getElementById('popupBody').innerHTML = html;
+  document.getElementById('infoPopup').classList.add('active');
+  lucide.createIcons();
+}
+
+function closePopup() {
+  document.getElementById('infoPopup').classList.remove('active');
+}
+
+// ===== Render Tree =====
+function renderTree() {
+  const container = document.getElementById('treeContent');
+  const emptyState = document.getElementById('emptyState');
+
+  if (allData.length === 0) {
+    container.innerHTML = '';
+    container.appendChild(emptyState);
+    lucide.createIcons();
+    return;
+  }
+
+  // Group by generation
+  const gens = {};
+  allData.forEach(d => {
+    const g = d.generation || 0;
+    if (!gens[g]) gens[g] = [];
+    gens[g].push(d);
+  });
+
+  const sortedGens = Object.keys(gens).map(Number).sort((a, b) => a - b);
+
+  let html = '';
+  sortedGens.forEach((g, idx) => {
+    const members = gens[g].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    html += `<div class="gen-row scroll-reveal" style="animation-delay:${idx * 80}ms;">`;
+    html += `<div class="gen-label">Generasi ${g + 1}</div>`;
+
+    members.forEach(m => {
+      const genderClass = m.gender === 'female' ? 'female' : 'male';
+      const relColors = { spouse: '#e74c3c', child: '#2ecc71', adopted: '#3498db', sibling: '#f39c12', root: '#8b5cf6' };
+      const dotColor = relColors[m.relationType] || '#8b5cf6';
+
+      html += `
+        <div class="family-card ${genderClass}" onclick="showInfoPopup(allData.find(d=>d.nodeId==='${m.nodeId}'))" style="cursor:pointer;">
+          <div style="width:12px;height:12px;border-radius:50%;background:${dotColor};position:absolute;top:-6px;left:50%;transform:translateX(-50%);box-shadow:0 0 0 3px #fff, 0 0 0 4px ${dotColor}20;"></div>
+          <div class="font-display font-bold text-gray-800 text-sm">${m.name}</div>
+          <div class="text-xs text-gray-500 mt-1.5">
+            ${m.gender === 'female' ? '♀ Wanita' : '♂ Pria'}
+            ${m.birthDate ? `<div class="text-gray-400 text-xs mt-0.5">${new Date(m.birthDate).getFullYear()}</div>` : ''}
+          </div>
+        </div>
+      `;
+    });
+
+    html += `</div>`;
+  });
+
+  container.innerHTML = html;
+
+  // Draw SVG lines after render
+  requestAnimationFrame(() => {
+    drawLines();
+    initScrollReveal();
+  });
+
+  lucide.createIcons();
+}
+
+// ===== Draw Relation Lines =====
+function drawLines() {
+  const old = document.querySelector('.lines-svg');
+  if (old) old.remove();
+
+  const content = document.getElementById('treeContent');
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.classList.add('lines-svg');
+  svg.setAttribute('viewBox', `0 0 ${content.scrollWidth} ${content.scrollHeight}`);
+  svg.style.width = content.scrollWidth + 'px';
+  svg.style.height = content.scrollHeight + 'px';
+
+  const contentRect = content.getBoundingClientRect();
+
+  allData.forEach(d => {
+    if (!d.parentId) return;
+    const childEl = content.querySelector(`[onclick*="${d.nodeId}"]`);
+    const parentEl = content.querySelector(`[onclick*="${d.parentId}"]`);
+    if (!childEl || !parentEl) return;
+
+    const cr = childEl.getBoundingClientRect();
+    const pr = parentEl.getBoundingClientRect();
+
+    const x1 = pr.left + pr.width / 2 - contentRect.left;
+    const y1 = pr.top + pr.height - contentRect.top;
+    const x2 = cr.left + cr.width / 2 - contentRect.left;
+    const y2 = cr.top - contentRect.top;
+
+    const mid = (y1 + y2) / 2;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', `M${x1},${y1} C${x1},${mid} ${x2},${mid} ${x2},${y2}`);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('class', `line-${d.relationType}`);
+
+    svg.appendChild(path);
+  });
+
+  content.insertBefore(svg, content.firstChild);
+}
+
+// ===== Scroll Reveal =====
+function initScrollReveal() {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.scroll-reveal').forEach(el => observer.observe(el));
+}
+
+// ===== Init =====
+lucide.createIcons();
+  </script>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9e8725daa45d1be6',t:'MTc3NTU0NTE0OC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
